@@ -1,0 +1,127 @@
+
+Шаг 1: Создание файла Dockerfile
+Создайте файл Dockerfile в корневом каталоге вашего проекта со следующим содержимым:
+FROM ubuntu:latest
+
+# Установка зависимостей
+RUN apt-get update && apt-get install -y curl wget
+
+# Установка Prometheus
+RUN wget https://github.com/prometheus/prometheus/releases/download/v2.37.1/prometheus-2.37.1.linux-amd64.tar.gz
+RUN tar -xvf prometheus-2.37.1.linux-amd64.tar.gz
+RUN cp prometheus-2.37.1.linux-amd64/prometheus /usr/bin
+RUN mkdir /etc/prometheus
+RUN mkdir /var/lib/prometheus
+RUN cp -r prometheus-2.37.1.linux-amd64/consoles /etc/prometheus/
+RUN cp -r prometheus-2.37.1.linux-amd64/console_libraries /etc/prometheus/
+RUN nano /etc/prometheus/prometheus.yml
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9090', 'localhost:9100']
+
+# Установка Grafana
+RUN tar -zxvf ~/monitoring_project/grafana-enterprise-11.2.0.linux-amd64.tar.gz -C /usr/share
+RUN mkdir -p /var/lib/grafana /var/log/grafana /etc/grafana
+RUN cp /usr/share/grafana/conf/sample.ini /etc/grafana/grafana.ini
+
+# Установка Node_exporter
+RUN wget https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz
+RUN tar -xvf node_exporter-1.3.1.linux-amd64.tar.gz
+RUN cp node_exporter-1.3.1.linux-amd64/node_exporter /usr/bin
+
+# Установка Postgres_exporter
+RUN wget https://github.com/prometheus-community/postgres_exporter/releases/download/v0.11.1/postgres_exporter-0.11.1.linux-amd64.tar.gz
+RUN tar -xvf postgres_exporter-0.11.1.linux-amd64.tar.gz
+RUN cp postgres_exporter-0.11.1.linux-amd64/postgres_exporter /usr/bin
+
+# Конфигурация Postgresql
+RUN echo "listen_addresses='*'" >> /etc/postgresql/16/main/postgresql.conf
+RUN echo "host    all             all             0.0.0.0/0               md5" >> /etc/postgresql/16/main/pg_hba.conf
+
+# Создание пользователя и базы данных
+RUN sudo -u postgres psql -c "CREATE USER myuser WITH PASSWORD 'mypassword';"
+RUN sudo -u postgres psql -c "CREATE DATABASE mydb OWNER myuser;"
+
+# Запуск сервисов
+CMD ["postgres", "-D", "/var/lib/postgresql/16/main"]
+CMD ["prometheus", "--config.file=/etc/prometheus/prometheus.yml"]
+CMD ["grafana-server", "--homepath=/usr/share/grafana"]
+CMD ["node_exporter"]
+CMD ["postgres_exporter"]
+Шаг 2: Создание Docker образа
+Выполните команду docker build -t my-monitoring-image . в корневом каталоге вашего проекта, чтобы создать Docker образ с именем my-monitoring-image.
+Шаг 3: Создание файла prometheus.yml
+Создайте файл prometheus.yml в корневом каталоге вашего проекта со следующим содержимым:
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['localhost:9187']
+$@$v=undefined-rv1$@$Here is the rest of the instructions:
+Шаг 4: Создание файла docker-compose.yml
+Создайте файл docker-compose.yml в корневом каталоге вашего проекта со следующим содержимым:
+version: '3'
+services:
+  postgres:
+    image: my-monitoring-image
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydb
+    volumes:
+      - ./pgdata:/var/lib/postgresql/16/main
+
+  prometheus:
+    image: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  node_exporter:
+    image: my-monitoring-image
+    ports:
+      - "9100:9100"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=mypassword
+    volumes:
+      - ./grafana.ini:/etc/grafana/grafana.ini
+
+  postgres_exporter:
+    image: my-monitoring-image
+    ports:
+      - "9187:9187"
+Шаг 5: Создание файла grafana.ini
+Создайте файл grafana.ini в корневом каталоге вашего проекта со следующим содержимым:
+[server]
+http_port = 3000
+
+[database]
+type = postgres
+host = localhost:5432
+username = myuser
+password = mypassword
+name = mydb
+Шаг 6: Запуск Docker контейнеров
+Выполните команду docker-compose up в корневом каталоге вашего проекта, чтобы запустить Docker контейнеры.
+Шаг 7: Доступ к Grafana
+Откройте веб-браузер и перейдите по адресу http://localhost:3000, чтобы доступ к Grafana. Войдите с помощью логина admin и пароля mypassword.
+Шаг 8: Добавление источника данных в Grafana
+Войдите в Grafana и добавьте новый источник данных, выбрав тип Prometheus. Введите адрес http://prometheus:9090 и нажмите Save & Test.
+Шаг 9: Создание dashboard в Grafana
+Создайте новый dashboard в Grafana, добавив панели для отображения метрик из Prometheus.
